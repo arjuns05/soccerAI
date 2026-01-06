@@ -1,54 +1,75 @@
+# app/rag_explain.py
 from __future__ import annotations
-from openai import OpenAI
+
+from typing import Tuple, List
+import numpy as np
 from sqlalchemy.orm import Session
-from app.config import settings
-from app.rag_store import top_k_similar 
+from sklearn.feature_extraction.text import HashingVectorizer
 
-client = OpenAI(api_key = settings.openai_api_key)
+from app.models import RagDoc
+from app.llm_client import get_llm_client
+
+# Local, no-download, fixed-dim embeddings
+# (HashingVectorizer is fast and doesn't need fit() / training.)
+_VECTOR_DIM = 768
+_vectorizer = HashingVectorizer(
+    n_features=_VECTOR_DIM,
+    alternate_sign=False,
+    norm="l2",
+    ngram_range=(1, 2),
+)
+
 def embed_text(text: str) -> list[float]:
-    resp = client.embeddings.create(
-        model = settings.openai_embed_model, 
-        input = text
+    v = _vectorizer.transform([text]).toarray().astype(np.float32)[0]
+    return v.tolist()
+
+def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
+    denom = (np.linalg.norm(a) * np.linalg.norm(b)) + 1e-9
+    return float(np.dot(a, b) / denom)
+
+def retrieve_top_k(db: Session, query: str, k: int = 5) -> Tuple[List[RagDoc], List[dict]]:
+    q_emb = np.array(embed_text(query), dtype=np.float32)
+
+    docs = db.query(RagDoc).all()
+    scored = []
+    for d in docs:
+        d_emb = np.array(d.embedding, dtype=np.float32)
+        scored.append((cosine_sim(q_emb, d_emb), d))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = [d for _, d in scored[:k]]
+
+    citations = []
+    for d in top:
+        citations.append({
+            "doc_id": d.id,
+            "doc_type": d.doc_type,
+            "meta": d.meta,
+        })
+    return top, citations
+
+def explain_prediction(db: Session, match_prompt: str, probs: dict, k: int = 5) -> tuple[str, list]:
+    top_docs, citations = retrieve_top_k(db, match_prompt, k=k)
+
+    context_lines = []
+    for i, d in enumerate(top_docs, start=1):
+        context_lines.append(f"[{i}] {d.text}")
+
+    context = "\n".join(context_lines)
+
+    system = (
+        "You are an expert football analyst. "
+        "Given a live match snapshot and some retrieved historical context, "
+        "write a short, specific explanation for the prediction."
     )
-    return resp.data[0].embedding
-
-def explain_prediction(session: Session, match_prompt:str, pred_probs: dict, k:int) -> tuple[str, list[dict]]:
-    '''
-
-    RAG: embded the prompt, get similar history, ask OpenAI to explain using that context
-
-    '''
-
-    q_emb = embed_text(match_prompt)
-    docs = top_k_similar(session, q_emb, k=k)
-
-    context = "\n\n".join(
-        [f"- [doc_id={d.id}]] {d.text}" for d in docs]
-    )
-    prompt = f"""
-    You are an explainable football prediction assistant.
-
-    We have a live match summary:
-    {match_prompt}
-
-    Model probabilities:
-    HOME_WIN={pred_probs["HOME_WIN"]:.3f}, DRAW={pred_probs["DRAW"]:.3f}, AWAY_WIN={pred_probs["AWAY_WIN"]:.3f}
-
-    Here is retrieved historical context (most similar first):
-    {context}
-
-    Task:
-    1) Explain *why* the model is leaning the way it is (tie it to features like goal diff, xG diff, shots, time).
-    2) Use the retrieved historical context to justify the explanation.
-    3) Provide 2-3 actionable fantasy angles (e.g., likely scorers, clean sheet odds, late-game volatility).
-    Keep it concise but concrete.
-    """
-
-    resp = client.responses.create(
-        model = settings.openai_text_model, 
-        input = prompt
+    user = (
+        f"Match snapshot:\n{match_prompt}\n\n"
+        f"Model probabilities:\nHOME_WIN={probs['HOME_WIN']:.3f}, DRAW={probs['DRAW']:.3f}, AWAY_WIN={probs['AWAY_WIN']:.3f}\n\n"
+        f"Retrieved context:\n{context}\n\n"
+        "Write 5-8 bullet points explaining the prediction. "
+        "Reference the retrieved items by [#] when relevant."
     )
 
-    explanation = resp.output_text
-    citations = [{"docs_id":d.id, "meta": d.meta} for d in docs]
-    return explanation, citations
+    llm = get_llm_client()
+    text = llm.chat(system=system, user=user, max_tokens=350, temperature=0.2)
+    return text, citations
