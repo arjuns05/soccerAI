@@ -1,2 +1,96 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+dist/
+build/
+wheels/
+pip-wheel-metadata/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.nox/
+.tox/
+.mypy_cache/
+.pytype/
+ruff_cache/
+.pyre/
+pytestdebug.log
+
+# ---- Virtual environments ----
+.venv/
+venv/
+ENV/
+env/
+.conda/
+.python-version
+
+# ---- Environment / secrets ----
 .env
-.env.example
+.env.*
+*.pem
+*.key
+*.crt
+
+# ---- Logs ----
+*.log
+logs/
+tmp/
+*.out
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+
+# ---- Model artifacts / data ----
+*.joblib
+*.pkl
+*.pickle
+*.onnx
+models/
+data/
+datasets/
+artifacts/
+outputs/
+runs/
+mlruns/
+
+# ---- Local DB / redis dumps (if any) ----
+*.sqlite3
+*.db
+dump.rdb
+appendonly.aof
+
+# ---- Kafka local state (if you ever run local broker in-repo) ----
+kafka-logs/
+zookeeper-data/
+zookeeper-logs/
+
+# ---- IDE / editor ----
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+
+# ---- macOS ----
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# ---- Windows ----
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---- Misc ----
+*.tmp
+*.bak
