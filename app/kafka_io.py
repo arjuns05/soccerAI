@@ -1,22 +1,42 @@
-import json 
-from kafka import KafkaProducer, KafkaConsumer 
-from app.config import settings 
+import json
+from confluent_kafka import Producer, Consumer, KafkaException
+from app.config import settings
 
-def make_producer() -> KafkaProducer: 
-    return KafkaProducer(
-        bootstrap_servers = settings.kafka_bootstrap_servers.split(","), 
-        value_serializer = lambda v: json.dumps(v).encode("utf-8"), 
-        linger_ms = 5, #helps batching, lowlatency
-        acks = 1
-    )
-def make_consumer(topic:str) -> KafkaConsumer:
-    return KafkaConsumer(
-        topic, 
-        bootstrap_servers = settings.kafka_bootstrap_servers.split(','), 
-        group_id = settings.consumer_group, 
-        auto_offset_reset = "latest", 
-        enable_auto_commit = True, 
-        value_deserializer= lambda b: json.loads(b.decode("utf-8")), 
-        consumer_timeout_ms = 1000, 
-        max_poll_records = 500
-    )
+def make_producer() -> Producer:
+    conf = {
+        "bootstrap.servers": settings.kafka_bootstrap_servers,
+        # keep latency low
+        "linger.ms": 5,
+        "batch.num.messages": 1000,
+        "enable.idempotence": False,  # can turn on later
+    }
+    return Producer(conf)
+
+def make_consumer(topic: str) -> Consumer:
+    conf = {
+        "bootstrap.servers": settings.kafka_bootstrap_servers,
+        "group.id": settings.consumer_group,
+        "auto.offset.reset": "latest",
+        "enable.auto.commit": True,
+        # low-latency polling
+        "fetch.wait.max.ms": 25,
+        "max.poll.interval.ms": 300000,
+    }
+    c = Consumer(conf)
+    c.subscribe([topic])
+    return c
+
+def send_json(producer: Producer, topic: str, value: dict) -> None:
+    payload = json.dumps(value).encode("utf-8")
+    producer.produce(topic, payload)
+    producer.poll(0)  # serve delivery callbacks
+
+def poll_json(consumer: Consumer, timeout: float = 0.05) -> dict | None:
+    msg = consumer.poll(timeout)
+    if msg is None:
+        return None
+    if msg.error():
+        # Ignore benign errors; raise the rest if you want strictness
+        # raise KafkaException(msg.error())
+        return None
+    return json.loads(msg.value().decode("utf-8"))

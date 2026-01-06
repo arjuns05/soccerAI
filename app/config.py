@@ -14,7 +14,7 @@ class Settings(BaseModel):
 
     # Postgres
     pg_host: str = os.getenv("PG_HOST", "localhost")
-    pg_port: int = int(os.getenv("PG_PORT", "5432"))
+    pg_port: int = int(os.getenv("PG_PORT", "5433"))
     pg_db: str = os.getenv("PG_DB", "fantasy_ai")
     pg_user: str = os.getenv("PG_USER", "postgres")
     pg_password: str = os.getenv("PG_PASSWORD", "postgres")
