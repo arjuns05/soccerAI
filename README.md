@@ -86,6 +86,11 @@ At minimum:
 
 Create a `.env` file in the project root.
 
+### Testing (To Be Continued)
+Execution Test: 
+Run: python -m scripts.test_explain
+This will walk you through one example of a full explanation of produced outputs
+
 ### Example `.env`
 ```env
 # Postgres
@@ -115,7 +120,3 @@ OPENROUTER_API_KEY=YOUR_KEY_HERE
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
 
-### Testing (To Be Continued)
-Execution Test: 
-Run: python -m scripts.test_explain
-This will walk you through one example of a full explanation of produced outputs
